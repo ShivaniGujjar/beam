@@ -9,14 +9,12 @@ import History from './components/History';
 const socket = io('http://localhost:9000');
 
 function App() {
-  // --- AUTH STATE ---
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
   const [authMode, setAuthMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
 
-  // --- APP STATE ---
   const [repoUrl, setRepoUrl] = useState('');
   const [projectName, setProjectName] = useState('');
   const [logs, setLogs] = useState([]);
@@ -33,22 +31,22 @@ function App() {
     { id: 4, label: 'Live' }
   ];
 
-  // --- AUTH LOGIC (The Missing Functions) ---
   const handleAuth = async (e) => {
     e.preventDefault();
     setAuthError('');
-    const endpoint = authMode === 'login' ? '/login' : '/signup';
+    const path = authMode === 'login' ? '/api/v1/auth/login' : '/api/v1/auth/signup'; 
     try {
-      const res = await axios.post(`http://localhost:9000${endpoint}`, { email, password });
+      const res = await axios.post(`http://localhost:9000${path}`, { email, password });
       if (authMode === 'login') {
-        localStorage.setItem('token', res.data.token);
-        setIsAuthenticated(true);
+        if (res.data.token) {
+          localStorage.setItem('token', res.data.token);
+          setIsAuthenticated(true);
+        }
       } else {
         setAuthMode('login');
-        alert("Signup successful! Please login.");
       }
     } catch (err) {
-      setAuthError(err.response?.data?.error || "Authentication failed");
+      setAuthError("Auth Failed. Check Backend.");
     }
   };
 
@@ -58,23 +56,34 @@ function App() {
     window.location.reload();
   };
 
-  // --- DEPLOYMENT LOGIC ---
   const fetchHistory = async () => {
     const token = localStorage.getItem('token');
     if (!token) return;
+
     try {
-      const res = await axios.get('http://localhost:9000/deployments', {
-        headers: { Authorization: token }
+      const res = await axios.get('http://localhost:9000/api/v1/projects/deployments', {
+        headers: { Authorization: `Bearer ${token}` }
       });
-      setHistory(res.data);
+      
+      console.log("📦 Raw Response:", res.data);
+
+      // 💡 Kabhi-kabhi backend res.data.data bhejta hai, check for both
+      const historyData = Array.isArray(res.data) ? res.data : res.data.data;
+
+      if (Array.isArray(historyData)) {
+        console.log("✅ Setting History State with:", historyData.length, "items");
+        setHistory([...historyData]); // Spread operator se state trigger force karte hain
+      } else {
+        console.log("⚠️ Data is not an array, check controller response!");
+      }
     } catch (err) {
-      if (err.response?.status === 401) handleLogout();
+      console.error("❌ Fetch Error:", err.message);
     }
   };
 
   useEffect(() => {
     if (isAuthenticated) fetchHistory();
-  }, [deployLink, isAuthenticated]);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -88,9 +97,10 @@ function App() {
         setIsDeploying(false);
         const slug = projectName.toLowerCase().replace(/ /g, '-');
         setDeployLink(`http://localhost:8000/${slug}.beam`);
+        fetchHistory(); // ✅ Deployment complete hone par history update
       }
     }
-  }, [logs, projectName]);
+  }, [logs]);
 
   useEffect(() => {
     socket.on('message', (log) => setLogs((prev) => [...prev, log]));
@@ -98,73 +108,41 @@ function App() {
   }, []);
 
   const handleDeploy = async () => {
-  if (!repoUrl || !projectName) return;
-  const token = localStorage.getItem('token');
-  
-  setIsDeploying(true);
-  setLogs([]);
-  setCurrentStep(1);
-  setDeployLink('');
-
-  try {
-    const res = await axios.post('http://localhost:9000/project', 
-      { gitUrl: repoUrl, projectName },
-      { headers: { Authorization: token } }
-    );
+    if (!repoUrl || !projectName) return;
+    const token = localStorage.getItem('token');
     
-    // Check if response is valid
-    if (res.data && res.data.data) {
-      const { projectSlug } = res.data.data;
-      socket.emit('subscribe', projectSlug);
-    }
-  } catch (err) {
-    console.error("Frontend Deployment Error:", err);
-    // 500 error ka message logs mein dikhayein instead of crashing
-    const errorMsg = err.response?.data?.details || err.response?.data?.error || "Deployment initiation failed.";
-    setLogs((prev) => [...prev, `❌ Error: ${errorMsg}`]);
-    setIsDeploying(false);
-  }
-};
+    setIsDeploying(true);
+    setLogs(["🚀 Beam Engine Starting..."]);
+    setCurrentStep(1);
+    setDeployLink('');
 
-  // --- RENDER ---
+    try {
+      const res = await axios.post('http://localhost:9000/api/v1/projects/deploy', 
+        { gitUrl: repoUrl, slug: projectName },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      if (res.data) {
+        // ✅ Database mein save hote hi history fetch kar lo taaki 'QUEUED' status dikhe
+        fetchHistory(); 
+        socket.emit('subscribe', projectName);
+      }
+    } catch (err) {
+      setLogs((prev) => [...prev, `❌ Error: ${err.response?.data?.error || 'Failed'}`]);
+      setIsDeploying(false);
+    }
+  };
+
   if (!isAuthenticated) {
-    return (
-      <Auth 
-        authMode={authMode} 
-        setAuthMode={setAuthMode} 
-        email={email} 
-        setEmail={setEmail} 
-        password={password} 
-        setPassword={setPassword} 
-        authError={authError} 
-        handleAuth={handleAuth} 
-      />
-    );
+    return <Auth authMode={authMode} setAuthMode={setAuthMode} email={email} setEmail={setEmail} password={password} setPassword={setPassword} authError={authError} handleAuth={handleAuth} />;
   }
 
   return (
     <div className="min-h-screen bg-[#050505] text-slate-200 font-sans">
       <Navbar isDeploying={isDeploying} handleLogout={handleLogout} />
-      
       <main className="max-w-7xl mx-auto px-8 py-12">
-        <DeploymentPanel 
-          projectName={projectName} setProjectName={setProjectName}
-          repoUrl={repoUrl} setRepoUrl={setRepoUrl}
-          handleDeploy={handleDeploy}
-          isDeploying={isDeploying}
-          steps={steps}
-          currentStep={currentStep}
-          logs={logs}
-          logEndRef={logEndRef}
-          setLogs={setLogs}
-          deployLink={deployLink}
-        />
-        
-        <History 
-          history={history} 
-          email={email} 
-          fetchHistory={fetchHistory} 
-        />
+        <DeploymentPanel projectName={projectName} setProjectName={setProjectName} repoUrl={repoUrl} setRepoUrl={setRepoUrl} handleDeploy={handleDeploy} isDeploying={isDeploying} steps={steps} currentStep={currentStep} logs={logs} logEndRef={logEndRef} setLogs={setLogs} deployLink={deployLink} />
+        <History history={history} email={email} fetchHistory={fetchHistory} />
       </main>
     </div>
   );
