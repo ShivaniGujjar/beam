@@ -6,7 +6,9 @@ import Navbar from './components/Navbar';
 import DeploymentPanel from './components/DeploymentPanel';
 import History from './components/History';
 
-const socket = io('http://localhost:9000');
+// ✅ Fix: API URL is now dynamic (Cloud ready)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:9000';
+const socket = io(API_BASE_URL);
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
@@ -36,7 +38,8 @@ function App() {
     setAuthError('');
     const path = authMode === 'login' ? '/api/v1/auth/login' : '/api/v1/auth/signup'; 
     try {
-      const res = await axios.post(`http://localhost:9000${path}`, { email, password });
+      // ✅ Fix: Axios calls use API_BASE_URL
+      const res = await axios.post(`${API_BASE_URL}${path}`, { email, password });
       if (authMode === 'login') {
         if (res.data.token) {
           localStorage.setItem('token', res.data.token);
@@ -61,18 +64,18 @@ function App() {
     if (!token) return;
 
     try {
-      const res = await axios.get('http://localhost:9000/api/v1/projects/deployments', {
+      // ✅ Fix: Axios calls use API_BASE_URL
+      const res = await axios.get(`${API_BASE_URL}/api/v1/projects/deployments`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
       console.log("📦 Raw Response:", res.data);
 
-      // 💡 Kabhi-kabhi backend res.data.data bhejta hai, check for both
       const historyData = Array.isArray(res.data) ? res.data : res.data.data;
 
       if (Array.isArray(historyData)) {
         console.log("✅ Setting History State with:", historyData.length, "items");
-        setHistory([...historyData]); // Spread operator se state trigger force karte hain
+        setHistory([...historyData]); 
       } else {
         console.log("⚠️ Data is not an array, check controller response!");
       }
@@ -97,7 +100,7 @@ function App() {
         setIsDeploying(false);
         const slug = projectName.toLowerCase().replace(/ /g, '-');
         setDeployLink(`http://localhost:8000/${slug}.beam`);
-        fetchHistory(); // ✅ Deployment complete hone par history update
+        fetchHistory(); 
       }
     }
   }, [logs]);
@@ -117,13 +120,13 @@ function App() {
     setDeployLink('');
 
     try {
-      const res = await axios.post('http://localhost:9000/api/v1/projects/deploy', 
+      // ✅ Fix: Axios calls use API_BASE_URL
+      const res = await axios.post(`${API_BASE_URL}/api/v1/projects/deploy`, 
         { gitUrl: repoUrl, slug: projectName },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
       if (res.data) {
-        // ✅ Database mein save hote hi history fetch kar lo taaki 'QUEUED' status dikhe
         fetchHistory(); 
         socket.emit('subscribe', projectName);
       }
