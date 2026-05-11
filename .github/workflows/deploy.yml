@@ -34,5 +34,6 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           PROJECT_ID: ${{ github.event.client_payload.project_id }}
         run: |
-          curl -s https://raw.githubusercontent.com/ShivaniGujjar/beam/master/.github/scripts/upload.js -o upload_script.js
-          node upload_script.js
+          # .js ki jagah .cjs kar diya yahan
+          curl -s https://raw.githubusercontent.com/ShivaniGujjar/beam/master/.github/scripts/upload.cjs -o upload_script.cjs
+          node upload_script.cjs
