@@ -95,20 +95,22 @@ function App() {
 
   // ✅ FIXED: Socket Listener for Status & Messages
   useEffect(() => {
-    // Listen for real-time logs
     socket.on('message', (log) => setLogs((prev) => [...prev, log]));
 
-    // 🚀 Listen for GitHub Build Status
+    // 🚀 Yeh listener ab har status update ko check karega
     socket.on('status', (data) => {
-      if (data === 'READY') {
+      console.log("📩 Socket Signal Received:", data); // Browser console check karne ke liye
+      
+      // Agar data sirf "READY" string hai ya object hai, dono handle honge
+      const status = typeof data === 'string' ? data : data.status;
+      
+      if (status === 'READY') {
         setCurrentStep(4);
         setIsDeploying(false);
         setLogs((prev) => [...prev, "✅ DEPLOYMENT COMPLETE: Site is Live!"]);
         
-        // Generate Live Link
         const slug = projectName.toLowerCase().replace(/ /g, '-');
         setDeployLink(`http://${slug}.localhost:8000`);
-        
         fetchHistory(); 
       }
     });
@@ -118,7 +120,6 @@ function App() {
       socket.off('status');
     };
   }, [projectName]);
-
   const handleDeploy = async () => {
     if (!repoUrl || !projectName) return;
     const token = localStorage.getItem('token');
