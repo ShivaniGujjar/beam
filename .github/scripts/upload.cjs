@@ -2,20 +2,15 @@ const fs = require('fs');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 const mime = require('mime-types');
-const WebSocket = require('ws'); // 👈 Explicitly adding this
+const WebSocket = require('ws'); // 👈 Ye line zaroori hai
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, {
   auth: {
     persistSession: false
   },
-  global: {
-    fetch: (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args)),
-  },
-  // WebSocket ka darr khatam karne ke liye ye line:
+  // Supabase ko batana padega ki transport ke liye 'ws' use kare
   realtime: {
-    params: {
-      eventsPerSecond: 10,
-    },
+    transport: WebSocket,
   },
 });
 
@@ -24,10 +19,9 @@ const DIST_PATH = path.join(process.cwd(), 'dist');
 
 async function uploadFolder(folderPath, storagePath) {
     if (!fs.existsSync(folderPath)) {
-        console.error(`❌ Folder not found: ${folderPath}`);
+        console.error("Dist folder not found!");
         return;
     }
-
     const files = fs.readdirSync(folderPath);
 
     for (const file of files) {
@@ -47,11 +41,10 @@ async function uploadFolder(folderPath, storagePath) {
                     upsert: true
                 });
 
-            if (error) console.error(`❌ Error uploading ${file}:`, error.message);
-            else console.log(`✅ Successfully uploaded: ${supabasePath}`);
+            if (error) console.error(`Error uploading ${file}:`, error.message);
+            else console.log(`Uploaded: ${supabasePath}`);
         }
     }
 }
 
-console.log("🚀 Starting upload to Supabase...");
 uploadFolder(DIST_PATH, '');
