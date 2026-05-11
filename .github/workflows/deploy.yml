@@ -11,8 +11,8 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          # Hum poore URL ki jagah sirf 'ShivaniGujjar/portfolio' pass karenge
-          repository: ${{ github.event.client_payload.repo_url }}
+          # Ye logic URL se 'https://github.com/' hata dega agar aap poora link dalte ho
+          repository: ${{ replace(github.event.client_payload.repo_url, 'https://github.com/', '') }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
