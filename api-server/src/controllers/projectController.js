@@ -1,4 +1,4 @@
-const Redis = require('ioredis');
+const axios = require('axios'); // 👈 Install using: npm install axios
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
@@ -10,13 +10,39 @@ const ProjectSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, required: true }
 }, { 
     timestamps: true,
-    collection: 'deployments' // 👈 Ye Compass wale collection name se match hona chahiye
+    collection: 'deployments' 
 });
 
-// Model register karte waqt bhi 'Deployment' use karte hain taaki clarity rahe
 const Project = mongoose.models.Deployment || mongoose.model('Deployment', ProjectSchema);
 
-const publisher = new Redis(process.env.REDIS_URL);
+// --- 🚀 GITHUB TRIGGER FUNCTION ---
+const triggerGitHubBuild = async (repoUrl, projectId) => {
+    const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+    const GITHUB_REPO_OWNER = "ShivaniGujjar";
+    const GITHUB_REPO_NAME = "beam";
+
+    try {
+        await axios.post(
+            `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/dispatches`,
+            {
+                event_type: 'trigger-build',
+                client_payload: {
+                    repo_url: repoUrl,
+                    project_id: projectId // Hamara slug/project identifier
+                }
+            },
+            {
+                headers: {
+                    'Authorization': `token ${GITHUB_TOKEN}`,
+                    'Accept': 'application/vnd.github.v3+json',
+                }
+            }
+        );
+        console.log("🚀 GitHub Build Action Triggered!");
+    } catch (error) {
+        console.error("❌ GitHub Trigger Failed:", error.response ? error.response.data : error.message);
+    }
+};
 
 exports.createDeployment = async (req, res) => {
     console.log("--- 🚀 Deployment Request Received ---");
@@ -41,7 +67,9 @@ exports.createDeployment = async (req, res) => {
 
         console.log(`✅ SAVED TO DEPLOYMENTS: ${newProject._id}`);
 
-        await publisher.publish('build-tasks', JSON.stringify({ gitUrl, slug }));
+        // --- ⚡️ TRIGGER GITHUB ACTION INSTEAD OF REDIS ---
+        await triggerGitHubBuild(gitUrl, slug);
+
         res.status(201).json({ status: 'queued', data: newProject });
 
     } catch (error) {
@@ -53,6 +81,8 @@ exports.createDeployment = async (req, res) => {
 exports.getDeployments = async (req, res) => {
     try {
         const authHeader = req.headers.authorization;
+        if (!authHeader) return res.status(401).json({ error: "No Token" });
+        
         const token = authHeader.split(' ')[1];
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 

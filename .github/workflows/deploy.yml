@@ -1,0 +1,39 @@
+name: Beam Build Engine
+
+on:
+  repository_dispatch:
+    types: [trigger-build]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.client_payload.repo_url }} # User ki repo clone hogi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Project Dependencies
+        run: npm install
+
+      - name: Run Vite Build
+        run: npm run build
+
+      - name: Install Script Dependencies
+        # Ye zaroori hai taaki upload.js script chal sake
+        run: npm install @supabase/supabase-js mime-types
+
+      - name: Upload to Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          PROJECT_ID: ${{ github.event.client_payload.project_id }}
+        # Hum apne main repo se script ko fetch karke chala rahe hain
+        run: |
+          curl -s https://raw.githubusercontent.com/ShivaniGujjar/beam/master/.github/scripts/upload.js -o upload_script.js
+          node upload_script.js
