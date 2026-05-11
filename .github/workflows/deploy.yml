@@ -11,7 +11,6 @@ jobs:
       - name: Extract Repo Path
         id: repo-check
         run: |
-          # Ye logic https://github.com/ ko remove kar dega agar user ne full URL dala ho
           RAW_URL="${{ github.event.client_payload.repo_url }}"
           CLEAN_REPO=$(echo $RAW_URL | sed 's|https://github.com/||' | sed 's|/$||')
           echo "REPO_PATH=$CLEAN_REPO" >> $GITHUB_OUTPUT
@@ -20,7 +19,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ steps.repo-check.outputs.REPO_PATH }}
-          token: ${{ secrets.GITHUB_TOKEN }} # Zaroori hai private repos ya high limits ke liye
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -47,7 +46,8 @@ jobs:
 
       - name: Notify API Server
         run: |
-          # 🚨 YAHAN APNA RENDER/DEPLOYED URL DALO 🚨
-          curl -X POST https://your-deployed-api.com/api/v1/projects/status \
+          # 🚨 ABHI KE ABHI terminal mein 'ngrok http 9000' chalao
+          # Jo 'https://...' wala link mile, use 'TERA_NGROK_LINK' ki jagah dalo
+          curl -X POST TERA_NGROK_LINK/api/v1/projects/status \
           -H "Content-Type: application/json" \
           -d '{"projectId": "${{ github.event.client_payload.project_id }}", "status": "READY"}'
