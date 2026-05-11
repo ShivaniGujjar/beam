@@ -11,7 +11,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          # Ye logic URL se 'https://github.com/' hata dega agar aap poora link dalte ho
+          # Ye logic URL mein se 'https://github.com/' ko gayab kar dega agar wo hua toh
           repository: ${{ replace(github.event.client_payload.repo_url, 'https://github.com/', '') }}
 
       - name: Setup Node.js
@@ -26,7 +26,6 @@ jobs:
         run: npm run build
 
       - name: Install Script Dependencies
-        # Ye zaroori hai taaki upload.js script chal sake
         run: npm install @supabase/supabase-js mime-types
 
       - name: Upload to Supabase
@@ -34,7 +33,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           PROJECT_ID: ${{ github.event.client_payload.project_id }}
-        # Hum apne main repo se script ko fetch karke chala rahe hain
         run: |
           curl -s https://raw.githubusercontent.com/ShivaniGujjar/beam/master/.github/scripts/upload.js -o upload_script.js
           node upload_script.js
