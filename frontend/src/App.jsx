@@ -6,8 +6,8 @@ import Navbar from './components/Navbar';
 import DeploymentPanel from './components/DeploymentPanel';
 import History from './components/History';
 
-// ✅ Fix: API URL is now dynamic (Cloud ready)
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:9000';
+// ✅ API URL setup
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://beam-ten-dusky.vercel.app';
 const socket = io(API_BASE_URL);
 
 function App() {
@@ -38,7 +38,6 @@ function App() {
     setAuthError('');
     const path = authMode === 'login' ? '/api/v1/auth/login' : '/api/v1/auth/signup'; 
     try {
-      // ✅ Fix: Axios calls use API_BASE_URL
       const res = await axios.post(`${API_BASE_URL}${path}`, { email, password });
       if (authMode === 'login') {
         if (res.data.token) {
@@ -62,22 +61,13 @@ function App() {
   const fetchHistory = async () => {
     const token = localStorage.getItem('token');
     if (!token) return;
-
     try {
-      // ✅ Fix: Axios calls use API_BASE_URL
       const res = await axios.get(`${API_BASE_URL}/api/v1/projects/deployments`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
-      console.log("📦 Raw Response:", res.data);
-
       const historyData = Array.isArray(res.data) ? res.data : res.data.data;
-
       if (Array.isArray(historyData)) {
-        console.log("✅ Setting History State with:", historyData.length, "items");
         setHistory([...historyData]); 
-      } else {
-        console.log("⚠️ Data is not an array, check controller response!");
       }
     } catch (err) {
       console.error("❌ Fetch Error:", err.message);
@@ -88,27 +78,46 @@ function App() {
     if (isAuthenticated) fetchHistory();
   }, [isAuthenticated]);
 
+  // Scroll to bottom when logs update
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
+
+  // ✅ Step Update Logic based on logs
+  useEffect(() => {
     const lastLog = logs[logs.length - 1];
     if (lastLog) {
       if (lastLog.includes('Cloning')) setCurrentStep(1);
       if (lastLog.includes('Installing') || lastLog.includes('build')) setCurrentStep(2);
       if (lastLog.includes('Beaming')) setCurrentStep(3);
-      if (lastLog.includes('DEPLOYMENT COMPLETE')) {
-        setCurrentStep(4);
-        setIsDeploying(false);
-        const slug = projectName.toLowerCase().replace(/ /g, '-');
-        setDeployLink(`http://localhost:8000/${slug}.beam`);
-        fetchHistory(); 
-      }
     }
   }, [logs]);
 
+  // ✅ FIXED: Socket Listener for Status & Messages
   useEffect(() => {
+    // Listen for real-time logs
     socket.on('message', (log) => setLogs((prev) => [...prev, log]));
-    return () => socket.off('message');
-  }, []);
+
+    // 🚀 Listen for GitHub Build Status
+    socket.on('status', (data) => {
+      if (data === 'READY') {
+        setCurrentStep(4);
+        setIsDeploying(false);
+        setLogs((prev) => [...prev, "✅ DEPLOYMENT COMPLETE: Site is Live!"]);
+        
+        // Generate Live Link
+        const slug = projectName.toLowerCase().replace(/ /g, '-');
+        setDeployLink(`http://${slug}.localhost:8000`);
+        
+        fetchHistory(); 
+      }
+    });
+
+    return () => {
+      socket.off('message');
+      socket.off('status');
+    };
+  }, [projectName]);
 
   const handleDeploy = async () => {
     if (!repoUrl || !projectName) return;
@@ -120,7 +129,6 @@ function App() {
     setDeployLink('');
 
     try {
-      // ✅ Fix: Axios calls use API_BASE_URL
       const res = await axios.post(`${API_BASE_URL}/api/v1/projects/deploy`, 
         { gitUrl: repoUrl, slug: projectName },
         { headers: { Authorization: `Bearer ${token}` } }
@@ -128,6 +136,7 @@ function App() {
       
       if (res.data) {
         fetchHistory(); 
+        // Subscribe to project-specific socket room
         socket.emit('subscribe', projectName);
       }
     } catch (err) {
@@ -144,7 +153,20 @@ function App() {
     <div className="min-h-screen bg-[#050505] text-slate-200 font-sans">
       <Navbar isDeploying={isDeploying} handleLogout={handleLogout} />
       <main className="max-w-7xl mx-auto px-8 py-12">
-        <DeploymentPanel projectName={projectName} setProjectName={setProjectName} repoUrl={repoUrl} setRepoUrl={setRepoUrl} handleDeploy={handleDeploy} isDeploying={isDeploying} steps={steps} currentStep={currentStep} logs={logs} logEndRef={logEndRef} setLogs={setLogs} deployLink={deployLink} />
+        <DeploymentPanel 
+          projectName={projectName} 
+          setProjectName={setProjectName} 
+          repoUrl={repoUrl} 
+          setRepoUrl={setRepoUrl} 
+          handleDeploy={handleDeploy} 
+          isDeploying={isDeploying} 
+          steps={steps} 
+          currentStep={currentStep} 
+          logs={logs} 
+          logEndRef={logEndRef} 
+          setLogs={setLogs} 
+          deployLink={deployLink} 
+        />
         <History history={history} email={email} fetchHistory={fetchHistory} />
       </main>
     </div>
