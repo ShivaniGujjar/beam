@@ -8,10 +8,19 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Extract Repo Path
+        id: repo-check
+        run: |
+          # Ye logic https://github.com/ ko remove kar dega agar user ne full URL dala ho
+          RAW_URL="${{ github.event.client_payload.repo_url }}"
+          CLEAN_REPO=$(echo $RAW_URL | sed 's|https://github.com/||' | sed 's|/$||')
+          echo "REPO_PATH=$CLEAN_REPO" >> $GITHUB_OUTPUT
+
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.client_payload.repo_url }}
+          repository: ${{ steps.repo-check.outputs.REPO_PATH }}
+          token: ${{ secrets.GITHUB_TOKEN }} # Zaroori hai private repos ya high limits ke liye
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -25,7 +34,6 @@ jobs:
         run: npm run build
 
       - name: Install Upload Tools
-        # Hum sirf ek baar zaroori tools install karenge
         run: npm install @supabase/supabase-js mime-types ws node-fetch
 
       - name: Upload to Supabase
@@ -39,6 +47,7 @@ jobs:
 
       - name: Notify API Server
         run: |
-          curl -X POST http://your-api-url.com/status \
+          # 🚨 YAHAN APNA RENDER/DEPLOYED URL DALO 🚨
+          curl -X POST https://your-deployed-api.com/api/v1/projects/status \
           -H "Content-Type: application/json" \
           -d '{"projectId": "${{ github.event.client_payload.project_id }}", "status": "READY"}'
