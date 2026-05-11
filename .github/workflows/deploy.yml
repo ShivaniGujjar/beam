@@ -18,15 +18,15 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Script Dependencies
-        run: npm install @supabase/supabase-js mime-types ws node-fetch
+      - name: Install Project Dependencies
+        run: npm install
 
       - name: Run Vite Build
         run: npm run build
 
-      - name: Install Script Dependencies
-        # 'ws' add kiya hai taaki Supabase client Node 20 par crash na ho
-        run: npm install @supabase/supabase-js mime-types ws
+      - name: Install Upload Tools
+        # Hum sirf ek baar zaroori tools install karenge
+        run: npm install @supabase/supabase-js mime-types ws node-fetch
 
       - name: Upload to Supabase
         env:
