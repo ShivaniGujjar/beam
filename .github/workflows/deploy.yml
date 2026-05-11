@@ -36,3 +36,9 @@ jobs:
         run: |
           curl -s https://raw.githubusercontent.com/ShivaniGujjar/beam/master/.github/scripts/upload.cjs -o upload_script.cjs
           node upload_script.cjs
+
+      - name: Notify API Server
+        run: |
+          curl -X POST http://your-api-url.com/status \
+          -H "Content-Type: application/json" \
+          -d '{"projectId": "${{ github.event.client_payload.project_id }}", "status": "READY"}'

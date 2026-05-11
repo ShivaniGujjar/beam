@@ -1,8 +1,8 @@
-const axios = require('axios'); // 👈 Install using: npm install axios
+const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
-// --- 💡 COLLECTION NAME FIX ---
+// --- 💡 MODEL SETUP ---
 const ProjectSchema = new mongoose.Schema({
     gitUrl: { type: String, required: true },
     slug: { type: String, required: true },
@@ -28,7 +28,7 @@ const triggerGitHubBuild = async (repoUrl, projectId) => {
                 event_type: 'trigger-build',
                 client_payload: {
                     repo_url: repoUrl,
-                    project_id: projectId // Hamara slug/project identifier
+                    project_id: projectId 
                 }
             },
             {
@@ -44,6 +44,7 @@ const triggerGitHubBuild = async (repoUrl, projectId) => {
     }
 };
 
+// --- 🛠 CREATE DEPLOYMENT ---
 exports.createDeployment = async (req, res) => {
     console.log("--- 🚀 Deployment Request Received ---");
     try {
@@ -55,22 +56,28 @@ exports.createDeployment = async (req, res) => {
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const userId = decoded.id;
-        console.log(`👤 User: ${userId}`);
 
-        // DB Save
+        // 1. Save to DB with initial status
         const newProject = await Project.create({ 
             gitUrl, 
             slug, 
-            status: 'QUEUED',
+            status: 'CLONING',
             userId: new mongoose.Types.ObjectId(userId) 
         }); 
 
         console.log(`✅ SAVED TO DEPLOYMENTS: ${newProject._id}`);
 
-        // --- ⚡️ TRIGGER GITHUB ACTION INSTEAD OF REDIS ---
+        // 2. ⚡️ SOCKET UPDATE: Send 'CLONING' status to frontend
+        const io = req.app.get('io');
+        if (io) {
+            io.to(slug).emit('status', 'CLONING');
+            console.log(`📡 Socket: Room ${slug} set to CLONING`);
+        }
+
+        // 3. Trigger the Build
         await triggerGitHubBuild(gitUrl, slug);
 
-        res.status(201).json({ status: 'queued', data: newProject });
+        res.status(201).json({ status: 'cloning', data: newProject });
 
     } catch (error) {
         console.error("❌ Controller Error:", error.message);
@@ -78,6 +85,39 @@ exports.createDeployment = async (req, res) => {
     }
 };
 
+// --- 📡 WEBHOOK: UPDATE BUILD STATUS ---
+// GitHub Action aakhri step mein is endpoint ko hit karega
+exports.updateBuildStatus = async (req, res) => {
+    const { projectId, status } = req.body; // projectId = slug
+    console.log(`📩 Webhook Received: Project ${projectId} is now ${status}`);
+
+    try {
+        // 1. Update status in Database
+        const updatedProject = await Project.findOneAndUpdate(
+            { slug: projectId }, 
+            { status: status }, 
+            { sort: { createdAt: -1 }, new: true }
+        );
+
+        if (!updatedProject) {
+            return res.status(404).json({ error: "Project not found" });
+        }
+
+        // 2. ⚡️ SOCKET UPDATE: Send 'READY' or 'FAILED' to frontend
+        const io = req.app.get('io');
+        if (io) {
+            io.to(projectId).emit('status', status);
+            console.log(`📡 Socket: Room ${projectId} updated to ${status}`);
+        }
+
+        res.json({ success: true, message: `Status updated to ${status}` });
+    } catch (error) {
+        console.error("❌ Webhook Error:", error.message);
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// --- 📜 GET HISTORY ---
 exports.getDeployments = async (req, res) => {
     try {
         const authHeader = req.headers.authorization;

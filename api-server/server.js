@@ -9,11 +9,17 @@ const { initSocket } = require('./src/socket');
 const PORT = process.env.PORT || 9000;
 const server = http.createServer(app);
 
+console.log("1. Database connect karne ja raha hoon...");
 connectDB();
 
-// 💡 Socket ko init karke app mein set kar rahe hain
-const io = initSocket(server);
-app.set('io', io); 
+console.log("2. Socket init karne ja raha hoon...");
+try {
+    const io = initSocket(server);
+    app.set('io', io); 
+    console.log("3. Socket set ho gaya!");
+} catch (err) {
+    console.error("❌ Socket Error:", err);
+}
 
 server.listen(PORT, () => {
     console.log(`API Server is running on port ${PORT} 🚀`);
