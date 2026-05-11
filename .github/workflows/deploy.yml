@@ -11,7 +11,8 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.client_payload.repo_url }} # User ki repo clone hogi
+          # Hum poore URL ki jagah sirf 'ShivaniGujjar/portfolio' pass karenge
+          repository: ${{ github.event.client_payload.repo_url }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
