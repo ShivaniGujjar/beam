@@ -11,8 +11,8 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          # Ye logic URL mein se 'https://github.com/' ko gayab kar dega agar wo hua toh
-          repository: ${{ replace(github.event.client_payload.repo_url, 'https://github.com/', '') }}
+          # Simple variable use karenge, koi replace function nahi
+          repository: ${{ github.event.client_payload.repo_url }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
