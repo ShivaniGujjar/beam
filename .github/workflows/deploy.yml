@@ -18,8 +18,8 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Project Dependencies
-        run: npm install
+      - name: Install Script Dependencies
+        run: npm install @supabase/supabase-js mime-types ws node-fetch
 
       - name: Run Vite Build
         run: npm run build
