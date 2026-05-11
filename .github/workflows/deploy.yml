@@ -46,8 +46,7 @@ jobs:
 
       - name: Notify API Server
         run: |
-          # 🚨 ABHI KE ABHI terminal mein 'ngrok http 9000' chalao
-          # Jo 'https://...' wala link mile, use 'TERA_NGROK_LINK' ki jagah dalo
-          curl -X POST TERA_NGROK_LINK/api/v1/projects/status \
+          # 🚀 TERA REAL LINK MAINE NEECHE DAL DIYA HAI
+          curl -X POST https://cmj0bzst-9000.inc1.devtunnels.ms/api/v1/projects/status \
           -H "Content-Type: application/json" \
           -d '{"projectId": "${{ github.event.client_payload.project_id }}", "status": "READY"}'
