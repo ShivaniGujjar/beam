@@ -11,7 +11,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          # Simple variable use karenge, koi replace function nahi
           repository: ${{ github.event.client_payload.repo_url }}
 
       - name: Setup Node.js
@@ -26,7 +25,8 @@ jobs:
         run: npm run build
 
       - name: Install Script Dependencies
-        run: npm install @supabase/supabase-js mime-types
+        # 'ws' add kiya hai taaki Supabase client Node 20 par crash na ho
+        run: npm install @supabase/supabase-js mime-types ws
 
       - name: Upload to Supabase
         env:
@@ -34,6 +34,5 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           PROJECT_ID: ${{ github.event.client_payload.project_id }}
         run: |
-          # .js ki jagah .cjs kar diya yahan
           curl -s https://raw.githubusercontent.com/ShivaniGujjar/beam/master/.github/scripts/upload.cjs -o upload_script.cjs
           node upload_script.cjs
