@@ -5,7 +5,13 @@ const projectRoutes = require('./routes/projectRoutes');
 
 const app = express();
 
-app.use(cors());
+// ✅ Update CORS Options
+app.use(cors({
+    origin: ["https://beam-ten-dusky.vercel.app", "http://localhost:5173", "http://localhost:3000"],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+}));
+
 app.use(express.json());
 
 // 💡 Important: Isse controllers ko socket ka access mil jayega
