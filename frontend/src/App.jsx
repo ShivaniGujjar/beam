@@ -6,9 +6,13 @@ import Navbar from './components/Navbar';
 import DeploymentPanel from './components/DeploymentPanel';
 import History from './components/History';
 
-// ✅ API URL setup
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://beam-ten-dusky.vercel.app';
-const socket = io(API_BASE_URL);
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:9000';
+const socket = io(API_BASE_URL, { autoConnect: true });
+
+// Helper to ensure clean, consistent slug formatting
+const formatSlug = (name) => {
+  return name.toLowerCase().trim().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-');
+};
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
@@ -70,7 +74,7 @@ function App() {
         setHistory([...historyData]); 
       }
     } catch (err) {
-      console.error("❌ Fetch Error:", err.message);
+      console.error("❌ Fetch History Error:", err.message);
     }
   };
 
@@ -78,30 +82,26 @@ function App() {
     if (isAuthenticated) fetchHistory();
   }, [isAuthenticated]);
 
-  // Scroll to bottom when logs update
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
-  // ✅ Step Update Logic based on logs
   useEffect(() => {
     const lastLog = logs[logs.length - 1];
     if (lastLog) {
-      if (lastLog.includes('Cloning')) setCurrentStep(1);
-      if (lastLog.includes('Installing') || lastLog.includes('build')) setCurrentStep(2);
-      if (lastLog.includes('Beaming')) setCurrentStep(3);
+      if (lastLog.includes('Cloning') || lastLog.includes('CLONING')) setCurrentStep(1);
+      if (lastLog.includes('Installing') || lastLog.includes('Build') || lastLog.includes('BUILD')) setCurrentStep(2);
+      if (lastLog.includes('Upload') || lastLog.includes('Supabase') || lastLog.includes('Beaming')) setCurrentStep(3);
+      if (lastLog.includes('DEPLOYMENT COMPLETE') || lastLog.includes('READY')) setCurrentStep(4);
     }
   }, [logs]);
 
-  // ✅ FIXED: Socket Listener for Status & Messages
+  // Unified Socket Subscription Listener
   useEffect(() => {
-    socket.on('message', (log) => setLogs((prev) => [...prev, log]));
+    const handleLog = (log) => setLogs((prev) => [...prev, log]);
 
-    // 🚀 Yeh listener ab har status update ko check karega
-    socket.on('status', (data) => {
-      console.log("📩 Socket Signal Received:", data); // Browser console check karne ke liye
-      
-      // Agar data sirf "READY" string hai ya object hai, dono handle honge
+    const handleStatus = (data) => {
+      console.log("📩 Socket Signal Received:", data); 
       const status = typeof data === 'string' ? data : data.status;
       
       if (status === 'READY') {
@@ -109,21 +109,29 @@ function App() {
         setIsDeploying(false);
         setLogs((prev) => [...prev, "✅ DEPLOYMENT COMPLETE: Site is Live!"]);
         
-        const slug = projectName.toLowerCase().replace(/ /g, '-');
-        setDeployLink(`http://${slug}.localhost:8000`);
+        const cleanSlug = formatSlug(projectName);
+        setDeployLink(`http://${cleanSlug}.localhost:8000`);
         fetchHistory(); 
       }
-    });
+    };
+
+    socket.on('message', handleLog);
+    socket.on('log', handleLog);
+    socket.on('status', handleStatus);
 
     return () => {
-      socket.off('message');
-      socket.off('status');
+      socket.off('message', handleLog);
+      socket.off('log', handleLog);
+      socket.off('status', handleStatus);
     };
   }, [projectName]);
+
   const handleDeploy = async () => {
     if (!repoUrl || !projectName) return;
     const token = localStorage.getItem('token');
     
+    const formattedSlug = formatSlug(projectName);
+
     setIsDeploying(true);
     setLogs(["🚀 Beam Engine Starting..."]);
     setCurrentStep(1);
@@ -131,17 +139,17 @@ function App() {
 
     try {
       const res = await axios.post(`${API_BASE_URL}/api/v1/projects/deploy`, 
-        { gitUrl: repoUrl, slug: projectName },
+        { gitUrl: repoUrl, slug: formattedSlug },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
       if (res.data) {
         fetchHistory(); 
-        // Subscribe to project-specific socket room
-        socket.emit('subscribe', projectName);
+        // Subscribe using exact formatted slug
+        socket.emit('subscribe', formattedSlug);
       }
     } catch (err) {
-      setLogs((prev) => [...prev, `❌ Error: ${err.response?.data?.error || 'Failed'}`]);
+      setLogs((prev) => [...prev, `❌ Error: ${err.response?.data?.error || 'Deployment failed'}`]);
       setIsDeploying(false);
     }
   };

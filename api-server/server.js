@@ -1,6 +1,18 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
+// 💡 TEMPORARY DEBUG LOGS TO TRACK THE `.env` PARSING VALUE:
+console.log("\n🔍 --- [DEBUG] ENVIRONMENT KEY VERIFICATION ---");
+console.log("PORT Loaded:", !!process.env.PORT);
+console.log("MONGO_URI Loaded:", !!process.env.MONGO_URI);
+console.log("GITHUB_TOKEN Loaded:", !!process.env.GITHUB_TOKEN);
+if (process.env.GITHUB_TOKEN) {
+    console.log("GITHUB_TOKEN Character Length:", process.env.GITHUB_TOKEN.length);
+} else {
+    console.log("⚠️ GITHUB_TOKEN IS MISSING OR NULL IN PROCESS.ENV!");
+}
+console.log("-----------------------------------------------\n");
+
 const http = require('http');
 const app = require('./src/app');
 const connectDB = require('./src/config/database');

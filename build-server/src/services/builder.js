@@ -8,7 +8,6 @@ const runBuild = (projectPath, sendLog, slug) => {
     return new Promise((resolve, reject) => {
         sendLog("🛠️ Build sequence initiated...");
         
-        // standard build commands
         const command = `npm install && npm run build`;
         
         const buildProcess = exec(command, { cwd: projectPath, shell: true });
@@ -23,7 +22,6 @@ const runBuild = (projectPath, sendLog, slug) => {
             sendLog("🏗️ Build finished! Starting Supabase upload logic...");
             
             try {
-                // Vite projects use 'dist'
                 const outputDir = path.join(projectPath, 'dist');
                 if (!fs.existsSync(outputDir)) throw new Error("dist folder not found!");
 
@@ -38,7 +36,6 @@ const runBuild = (projectPath, sendLog, slug) => {
                     const fileBuffer = fs.readFileSync(filePath);
                     const contentType = mime.lookup(filePath) || 'application/octet-stream';
                     
-                    // 💡 WINDOWS FIX: Kisi bhi tarah ka slash ho, usey '/' mein badal do
                     const cleanFileName = file.replace(/\\/g, '/');
                     const storagePath = `outputs/${slug}/${cleanFileName}`;
                     
@@ -52,7 +49,8 @@ const runBuild = (projectPath, sendLog, slug) => {
                         });
 
                     if (error) {
-                        sendLog(`❌ SUPABASE ERROR for ${cleanFileName}: ${error.message}`);
+                        console.error("❌ RAW SUPABASE ERROR:", error);
+                        sendLog(`❌ SUPABASE ERROR for ${cleanFileName}: ${error.message || JSON.stringify(error)}`);
                         throw error;
                     }
                     sendLog(`✅ Success: ${cleanFileName}`);
@@ -61,7 +59,7 @@ const runBuild = (projectPath, sendLog, slug) => {
                 sendLog("🏁 ALL FILES UPLOADED SUCCESSFULLY!");
                 resolve();
             } catch (err) {
-                sendLog(`❌ CRITICAL UPLOAD FAIL: ${err.message}`);
+                sendLog(`❌ CRITICAL UPLOAD FAIL: ${err.message || err}`);
                 reject(err);
             }
         });

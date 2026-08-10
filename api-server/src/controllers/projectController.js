@@ -1,13 +1,25 @@
-const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
+const Redis = require('ioredis');
 
-// --- 💡 MODEL SETUP ---
+// Redis Publisher for triggering builds
+const publisher = new Redis(process.env.REDIS_URL, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false
+});
+
+publisher.on('error', (err) => console.error('Redis Publisher Error ❌:', err.message));
+
+// Schema & Model Alignment
 const ProjectSchema = new mongoose.Schema({
     gitUrl: { type: String, required: true },
     slug: { type: String, required: true },
-    status: { type: String, default: 'QUEUED' },
-    userId: { type: mongoose.Schema.Types.ObjectId, required: true }
+    status: { 
+        type: String, 
+        enum: ['QUEUED', 'IN_PROGRESS', 'CLONING', 'READY', 'FAIL'], 
+        default: 'QUEUED' 
+    },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
 }, { 
     timestamps: true,
     collection: 'deployments' 
@@ -15,69 +27,60 @@ const ProjectSchema = new mongoose.Schema({
 
 const Project = mongoose.models.Deployment || mongoose.model('Deployment', ProjectSchema);
 
-// --- 🚀 GITHUB TRIGGER FUNCTION ---
-const triggerGitHubBuild = async (repoUrl, projectId) => {
-    const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-    const GITHUB_REPO_OWNER = "ShivaniGujjar";
-    const GITHUB_REPO_NAME = "beam";
-
-    try {
-        await axios.post(
-            `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/dispatches`,
-            {
-                event_type: 'trigger-build',
-                client_payload: {
-                    repo_url: repoUrl,
-                    project_id: projectId 
-                }
-            },
-            {
-                headers: {
-                    'Authorization': `token ${GITHUB_TOKEN}`,
-                    'Accept': 'application/vnd.github.v3+json',
-                }
-            }
-        );
-        console.log("🚀 GitHub Build Action Triggered!");
-    } catch (error) {
-        console.error("❌ GitHub Trigger Failed:", error.response ? error.response.data : error.message);
-    }
+// Helper function to sanitize slug
+const sanitizeSlug = (name) => {
+    return name.toLowerCase().trim().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-');
 };
 
 // --- 🛠 CREATE DEPLOYMENT ---
 exports.createDeployment = async (req, res) => {
     console.log("--- 🚀 Deployment Request Received ---");
     try {
-        const { gitUrl, slug } = req.body;
+        const { gitUrl, slug: rawSlug } = req.body;
         const authHeader = req.headers.authorization;
         
-        if (!authHeader) return res.status(401).json({ error: "No Token" });
+        if (!authHeader) return res.status(401).json({ error: "No Token Provided" });
         const token = authHeader.split(' ')[1];
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const userId = decoded.id;
-
-        // 1. Save to DB with initial status
-        const newProject = await Project.create({ 
-            gitUrl, 
-            slug, 
-            status: 'CLONING',
-            userId: new mongoose.Types.ObjectId(userId) 
-        }); 
-
-        console.log(`✅ SAVED TO DEPLOYMENTS: ${newProject._id}`);
-
-        // 2. ⚡️ SOCKET UPDATE: Send 'CLONING' status to frontend
-        const io = req.app.get('io');
-        if (io) {
-            io.to(slug).emit('status', 'CLONING');
-            console.log(`📡 Socket: Room ${slug} set to CLONING`);
+        let decoded;
+        try {
+            decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_beam_key_123');
+        } catch (jwtErr) {
+            console.error("❌ JWT Verification Failed:", jwtErr.message);
+            return res.status(401).json({ error: "Unauthorized: Token Invalid/Expired" });
         }
 
-        // 3. Trigger the Build
-        await triggerGitHubBuild(gitUrl, slug);
+        const extractedUserId = decoded.id || decoded._id || decoded.userId;
 
-        res.status(201).json({ status: 'cloning', data: newProject });
+        if (!extractedUserId || !mongoose.Types.ObjectId.isValid(extractedUserId)) {
+             console.error("❌ Invalid User ID in Token Payload:", extractedUserId);
+             return res.status(400).json({ error: "Invalid User Payload inside Token" });
+        }
+
+        const formattedSlug = sanitizeSlug(rawSlug);
+
+        // 1. Save DB Record
+        const newProject = await Project.create({ 
+            gitUrl, 
+            slug: formattedSlug, 
+            status: 'CLONING',
+            userId: new mongoose.Types.ObjectId(extractedUserId) 
+        }); 
+
+        console.log(`✅ SAVED TO DEPLOYMENTS: ${newProject._id} [Slug: ${formattedSlug}]`);
+
+        // 2. ⚡️ REDIS EVENT PUBLISH (Triggers local build-server)
+        await publisher.publish('build-tasks', JSON.stringify({ gitUrl, slug: formattedSlug }));
+        console.log(`📢 Task published to Redis channel 'build-tasks' for slug: ${formattedSlug}`);
+
+        // 3. Socket Event Emit
+        const io = req.app.get('io');
+        if (io) {
+            io.to(formattedSlug).emit('status', 'CLONING');
+            console.log(`📡 Socket: Room [${formattedSlug}] set to CLONING`);
+        }
+
+        res.status(201).json({ status: 'cloning', slug: formattedSlug, data: newProject });
 
     } catch (error) {
         console.error("❌ Controller Error:", error.message);
@@ -86,15 +89,14 @@ exports.createDeployment = async (req, res) => {
 };
 
 // --- 📡 WEBHOOK: UPDATE BUILD STATUS ---
-// GitHub Action aakhri step mein is endpoint ko hit karega
 exports.updateBuildStatus = async (req, res) => {
-    const { projectId, status } = req.body; // projectId = slug
+    const { projectId, status } = req.body; 
     console.log(`📩 Webhook Received: Project ${projectId} is now ${status}`);
 
     try {
-        // 1. Update status in Database
+        const formattedSlug = sanitizeSlug(projectId);
         const updatedProject = await Project.findOneAndUpdate(
-            { slug: projectId }, 
+            { slug: formattedSlug }, 
             { status: status }, 
             { sort: { createdAt: -1 }, new: true }
         );
@@ -103,11 +105,10 @@ exports.updateBuildStatus = async (req, res) => {
             return res.status(404).json({ error: "Project not found" });
         }
 
-        // 2. ⚡️ SOCKET UPDATE: Send 'READY' or 'FAILED' to frontend
         const io = req.app.get('io');
         if (io) {
-            io.to(projectId).emit('status', status);
-            console.log(`📡 Socket: Room ${projectId} updated to ${status}`);
+            io.to(formattedSlug).emit('status', status);
+            console.log(`📡 Socket: Room [${formattedSlug}] updated to ${status}`);
         }
 
         res.json({ success: true, message: `Status updated to ${status}` });
@@ -121,17 +122,20 @@ exports.updateBuildStatus = async (req, res) => {
 exports.getDeployments = async (req, res) => {
     try {
         const authHeader = req.headers.authorization;
-        if (!authHeader) return res.status(401).json({ error: "No Token" });
+        if (!authHeader) return res.status(401).json({ error: "No Token Provided" });
         
         const token = authHeader.split(' ')[1];
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_beam_key_123');
 
-        const deployments = await Project.find({ userId: new mongoose.Types.ObjectId(decoded.id) })
+        const extractedUserId = decoded.id || decoded._id || decoded.userId;
+
+        const deployments = await Project.find({ userId: new mongoose.Types.ObjectId(extractedUserId) })
             .sort({ createdAt: -1 });
 
-        console.log(`📜 Found ${deployments.length} deployments in Compass`);
+        console.log(`📜 Found ${deployments.length} deployments`);
         res.status(200).json(deployments);
     } catch (error) {
+        console.error("❌ Fetch History Failed:", error.message);
         res.status(500).json({ error: "Fetch history failed" });
     }
 };
