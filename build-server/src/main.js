@@ -3,30 +3,20 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 const Redis = require('ioredis');
 const mongoose = require('mongoose');
-const express = require('express'); // 👈 Express add kiya
+const express = require('express');
 
-// 1. 💡 BULLETPROOF DOTENV LOADING
-const possiblePaths = [
-    path.resolve(__dirname, '../../.env'), 
-    path.resolve(__dirname, '../.env'),     
-    path.resolve(process.cwd(), '.env'),     
-];
-
-let envLoaded = false;
-for (const envPath of possiblePaths) {
-    if (fs.existsSync(envPath)) {
-        require('dotenv').config({ path: envPath });
-        console.log(`✅ CONFIG: .env loaded from: ${envPath}`);
-        envLoaded = true;
-        break;
-    }
+// 1. 💡 DOTENV LOADING (Local Fallback + Cloud Direct process.env)
+try {
+    require('dotenv').config();
+} catch (e) {
+    console.log("Running in Cloud environment without local .env file");
 }
 
-// 2. 💡 MONGODB CONNECTION (Wait for Env)
+// 2. 💡 MONGODB CONNECTION
 const MONGO_URI = process.env.MONGO_URI;
 
 if (!MONGO_URI) {
-    console.error("❌ FATAL ERROR: MONGO_URI not found in .env file!");
+    console.error("❌ FATAL ERROR: MONGO_URI not found in environment!");
     process.exit(1);
 }
 
@@ -46,20 +36,32 @@ if (!process.env.REDIS_URL) {
     process.exit(1);
 }
 
-const subscriber = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
-const publisher = new Redis(process.env.REDIS_URL);
+const subscriber = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null, enableReadyCheck: false });
+const publisher = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null, enableReadyCheck: false });
+
+subscriber.on('connect', () => console.log('✅ Subscriber connected to Upstash Redis'));
+subscriber.on('error', (err) => console.error('❌ Redis Subscriber Error:', err.message));
+
+publisher.on('connect', () => console.log('✅ Publisher connected to Upstash Redis'));
+publisher.on('error', (err) => console.error('❌ Redis Publisher Error:', err.message));
 
 const { runBuild } = require('./services/builder'); 
 
-console.log("🚀 Build Server Listening for Tasks...");
-
-// 4. 💡 MAIN LOGIC
-subscriber.subscribe('build-tasks');
+// 4. 💡 MAIN REDIS SUBSCRIPTION LOGIC
+subscriber.subscribe('build-tasks', (err, count) => {
+    if (err) {
+        console.error("❌ Failed to subscribe to build-tasks channel:", err.message);
+    } else {
+        console.log(`📡 Subscribed to build-tasks queue. Listening on ${count} channel(s)...`);
+    }
+});
 
 subscriber.on('message', async (channel, message) => {
     if (channel !== 'build-tasks') return;
     
+    console.log("📩 Raw Task Message Received from Redis:", message);
     let projectSlug = '';
+    
     try {
         const { gitUrl, slug } = JSON.parse(message);
         projectSlug = slug.trim(); 
@@ -69,11 +71,11 @@ subscriber.on('message', async (channel, message) => {
             console.log(`[${projectSlug}]: ${log}`);
         };
 
-        // Update status to IN_PROGRESS (Taaki UI par Yellow ho jaye)
+        // Update status to IN_PROGRESS
         await Project.findOneAndUpdate({ slug: projectSlug }, { status: 'IN_PROGRESS' });
         sendLog("🚀 Deployment Started...");
 
-        const tempBaseDir = path.resolve(__dirname, '../../temp');
+        const tempBaseDir = path.resolve('/tmp', 'build-temp');
         const projectPath = path.join(tempBaseDir, projectSlug);
 
         if (!fs.existsSync(tempBaseDir)) {
@@ -85,6 +87,7 @@ subscriber.on('message', async (channel, message) => {
             fs.rmSync(projectPath, { recursive: true, force: true });
         }
 
+        // Git Clone
         execSync(`git clone ${gitUrl} "${projectPath}"`, { stdio: 'inherit' });
         sendLog("✅ Repository Cloned Successfully!");
 
@@ -92,9 +95,12 @@ subscriber.on('message', async (channel, message) => {
             // Trigger build
             await runBuild(projectPath, sendLog, projectSlug); 
             
-            // ✅ FINAL UPDATE: Status READY (UI par Green ho jaye)
+            // Status READY
             await Project.findOneAndUpdate({ slug: projectSlug }, { status: 'READY' });
             sendLog("✅ DEPLOYMENT COMPLETE");
+            
+            // Emit final socket trigger status
+            publisher.publish(`logs:${projectSlug}`, JSON.stringify({ status: 'READY' }));
         } else {
             throw new Error("Cloned directory not found.");
         }
@@ -102,7 +108,6 @@ subscriber.on('message', async (channel, message) => {
     } catch (error) {
         console.error(`❌ Build Task Failed:`, error.message);
         if (projectSlug) {
-            // Status FAIL update
             await Project.findOneAndUpdate({ slug: projectSlug }, { status: 'FAIL' });
             publisher.publish(`logs:${projectSlug}`, JSON.stringify({ 
                 log: `❌ Error: ${error.message}` 
@@ -111,7 +116,7 @@ subscriber.on('message', async (channel, message) => {
     }
 });
 
-// 5. 💡 DUMMY EXPRESS PORT BINDING FOR RENDER WEB SERVICE
+// 5. 💡 EXPRESS PORT BINDING FOR RENDER HEALTH CHECKS
 const app = express();
 const PORT = process.env.PORT || 9001;
 
