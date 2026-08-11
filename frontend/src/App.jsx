@@ -6,7 +6,7 @@ import Navbar from './components/Navbar';
 import DeploymentPanel from './components/DeploymentPanel';
 import History from './components/History';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:9000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'https://beam-api-server.onrender.com';
 const socket = io(API_BASE_URL, { autoConnect: true });
 
 // Helper to ensure clean, consistent slug formatting
