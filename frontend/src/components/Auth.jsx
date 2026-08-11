@@ -1,39 +1,106 @@
 import React from 'react';
-import { motion } from 'framer-motion';
-import { Rocket, Mail, Lock, UserPlus } from 'lucide-react';
+import { Mail, Lock, UserPlus } from 'lucide-react';
 
-const Auth = ({ authMode, setAuthMode, email, setEmail, password, setPassword, authError, handleAuth }) => (
-  <div className="min-h-screen bg-[#050505] flex items-center justify-center p-6 font-sans">
-    <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-red-600/10 blur-[120px] pointer-events-none" />
-    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-md bg-[#0f0f0f] border border-white/5 p-10 rounded-[32px] shadow-2xl">
-      <div className="flex flex-col items-center mb-8">
-        <div className="bg-red-600 p-3 rounded-2xl mb-4 shadow-lg shadow-red-600/20">
-          <Rocket size={32} className="text-white" />
+// Same system as the landing page: near-black board, thin neutral borders,
+// sharp corners, Space Grotesk for display type, mono only for tiny labels.
+// Red shows up in exactly three places here too: the mark, the focus state,
+// and the primary button — same restraint as the landing page.
+
+const Auth = ({ authMode, setAuthMode, email, setEmail, password, setPassword, authError, handleAuth }) => {
+  const isLogin = authMode === 'login';
+
+  return (
+    <div
+      className="min-h-screen bg-[#0A0A0B] text-[#F2F1EE] flex items-center justify-center p-6"
+      style={{ fontFamily: "'Space Grotesk', ui-sans-serif, system-ui, sans-serif" }}
+    >
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap');
+        .beam-body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', ui-sans-serif, system-ui, sans-serif; }
+        .beam-mono { font-family: ui-monospace, 'IBM Plex Mono', Menlo, Consolas, monospace; }
+        .beam-input:focus { border-color: #E8352B; }
+      `}</style>
+
+      <div className="w-full max-w-sm">
+        {/* mark, consistent with the landing nav */}
+        <div className="flex items-center gap-2.5 mb-10">
+          <span className="w-2.5 h-2.5 bg-[#E8352B]" />
+          <span className="font-bold text-base tracking-tight">BEAM</span>
         </div>
-        <h1 className="text-2xl font-black text-white italic tracking-tighter uppercase">Beam Engine</h1>
-        <p className="text-[10px] text-slate-500 font-mono tracking-widest uppercase mt-2">{authMode} to continue</p>
+
+        <div className="border border-[#1C1C1F] bg-[#0D0D0E] p-8">
+          <p className="beam-mono text-xs text-[#8B8B90] tracking-[0.15em] mb-2">
+            {isLogin ? 'SIGN IN' : 'CREATE ACCOUNT'}
+          </p>
+          <h1 className="text-2xl font-bold tracking-tight mb-8">
+            {isLogin ? 'Welcome back.' : 'Set up your account.'}
+          </h1>
+
+          <form onSubmit={handleAuth} className="space-y-5">
+            <div>
+              <label className="beam-mono text-[11px] text-[#8B8B90] tracking-[0.1em] block mb-2">
+                EMAIL
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8B8B90]" size={16} />
+                <input
+                  type="email"
+                  placeholder="you@example.com"
+                  required
+                  className="beam-input beam-body w-full bg-[#0A0A0B] border border-[#1C1C1F] py-3 pl-10 pr-3.5 text-sm text-[#F2F1EE] placeholder:text-[#5B5B60] outline-none transition-colors"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="beam-mono text-[11px] text-[#8B8B90] tracking-[0.1em] block mb-2">
+                PASSWORD
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8B8B90]" size={16} />
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  required
+                  className="beam-input beam-body w-full bg-[#0A0A0B] border border-[#1C1C1F] py-3 pl-10 pr-3.5 text-sm text-[#F2F1EE] placeholder:text-[#5B5B60] outline-none transition-colors"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {authError && (
+              <p className="beam-mono text-[11px] text-[#E8352B] tracking-wide">{authError}</p>
+            )}
+
+            <button
+              type="submit"
+              className="w-full bg-[#E8352B] hover:bg-[#FF4438] py-3.5 font-medium text-white text-sm transition-colors beam-body"
+            >
+              {isLogin ? 'Sign in' : 'Create account'}
+            </button>
+          </form>
+
+          <button
+            onClick={() => setAuthMode(isLogin ? 'signup' : 'login')}
+            className="w-full mt-6 beam-mono text-[11px] text-[#8B8B90] hover:text-[#F2F1EE] tracking-[0.1em] transition-colors flex items-center justify-center gap-2"
+          >
+            {isLogin ? (
+              <>
+                <UserPlus size={13} /> NEED AN ACCOUNT?
+              </>
+            ) : (
+              <>
+                <Lock size={13} /> ALREADY HAVE AN ACCOUNT?
+              </>
+            )}
+          </button>
+        </div>
       </div>
-
-      <form onSubmit={handleAuth} className="space-y-4">
-        <div className="relative">
-          <Mail className="absolute left-4 top-4 text-slate-600" size={18} />
-          <input type="email" placeholder="Email" required className="w-full bg-black/40 border border-white/5 p-4 pl-12 rounded-2xl focus:border-red-600/50 outline-none text-sm text-white" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <div className="relative">
-          <Lock className="absolute left-4 top-4 text-slate-600" size={18} />
-          <input type="password" placeholder="Password" required className="w-full bg-black/40 border border-white/5 p-4 pl-12 rounded-2xl focus:border-red-600/50 outline-none text-sm text-white" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </div>
-        {authError && <p className="text-red-500 text-[10px] font-bold uppercase tracking-tight ml-1">{authError}</p>}
-        <button type="submit" className="w-full bg-red-600 py-4 rounded-2xl font-black tracking-widest text-white hover:bg-red-700 transition-all uppercase italic">
-          {authMode === 'login' ? 'Ignite Session' : 'Create Account'}
-        </button>
-      </form>
-
-      <button onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')} className="w-full mt-6 text-[10px] font-bold text-slate-500 hover:text-white transition-colors uppercase tracking-widest flex items-center justify-center gap-2">
-        {authMode === 'login' ? <><UserPlus size={14}/> Need an account?</> : <><Lock size={14}/> Already have an account?</>}
-      </button>
-    </motion.div>
-  </div>
-);
+    </div>
+  );
+};
 
 export default Auth;
