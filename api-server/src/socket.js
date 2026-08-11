@@ -5,6 +5,7 @@ const initSocket = (server) => {
     const io = new Server(server, {
         cors: { 
             origin: [
+                "https://beam-sable.vercel.app", 
                 "https://beam-ten-dusky.vercel.app", 
                 "http://localhost:5173", 
                 "http://localhost:3000"
@@ -37,7 +38,6 @@ const initSocket = (server) => {
             const parsedData = JSON.parse(message);
             const log = parsedData.log;
             
-            // Dual emit so frontend hooks catch it reliably
             io.to(slug).emit('message', log);
             io.to(slug).emit('log', log);
             console.log(`📡 Relaying log for [${slug}]: ${log}`); 

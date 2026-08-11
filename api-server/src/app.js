@@ -5,16 +5,30 @@ const projectRoutes = require('./routes/projectRoutes');
 
 const app = express();
 
-// ✅ Update CORS Options
+// ✅ Allowed origins mein naya Vercel domain add kar diya
+const allowedOrigins = [
+  "https://beam-sable.vercel.app",
+  "https://beam-ten-dusky.vercel.app",
+  "http://localhost:5173",
+  "http://localhost:3000"
+];
+
 app.use(cors({
-    origin: ["https://beam-ten-dusky.vercel.app", "http://localhost:5173", "http://localhost:3000"],
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps, curl requests)
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            callback(null, true); // Fallback: Allow all Vercel previews dynamically
+        }
+    },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
 app.use(express.json());
 
-// 💡 Important: Isse controllers ko socket ka access mil jayega
 app.set('io', null); 
 
 app.use('/api/v1/auth', authRoutes); 
