@@ -7,8 +7,6 @@ import DeploymentPanel from './components/DeploymentPanel';
 import History from './components/History';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'https://beam-api-server.onrender.com';
-const SUPABASE_PROJECT_ID = "raxeapbmgaokvvivfymi"; // Your Supabase Project Subdomain
-
 const socket = io(API_BASE_URL, { autoConnect: true });
 
 const formatSlug = (name) => {
@@ -88,6 +86,7 @@ function App() {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
+  // 💡 CRITICAL CRASH FIX: Safe String Checking
   useEffect(() => {
     const lastLog = logs[logs.length - 1];
     if (lastLog && typeof lastLog === 'string') {
@@ -98,6 +97,7 @@ function App() {
     }
   }, [logs]);
 
+  // 💡 CRITICAL CRASH FIX: Convert Non-Strings Before State Save
   useEffect(() => {
     const handleLog = (log) => {
       if (!log) return;
@@ -115,11 +115,7 @@ function App() {
         setLogs((prev) => [...prev, "✅ DEPLOYMENT COMPLETE: Site is Live!"]);
         
         const cleanSlug = formatSlug(projectName);
-        
-        // 💡 OPTION 1 FIX: Direct Supabase CDN Object URL
-        const directLiveUrl = `https://${SUPABASE_PROJECT_ID}.supabase.co/storage/v1/object/public/deployments/outputs/${cleanSlug}/index.html`;
-        setDeployLink(directLiveUrl);
-        
+        setDeployLink(`http://${cleanSlug}.localhost:8000`);
         fetchHistory(); 
       }
     };
