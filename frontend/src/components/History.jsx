@@ -2,8 +2,6 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Layers, Globe, RefreshCw } from 'lucide-react';
 
-const PROXY_BASE_URL = 'https://proxy-server-beam.onrender.com';
-
 const History = ({ history, email, fetchHistory }) => (
   <section className="mt-24 space-y-8">
     <div className="flex items-center justify-between border-b border-white/5 pb-6">
@@ -39,6 +37,7 @@ const History = ({ history, email, fetchHistory }) => (
               </span>
             </div>
             
+            {/* 💡 FIXED: item.projectName ki jagah item.slug use kiya */}
             <h4 className="text-white font-bold text-base mb-1 truncate italic uppercase tracking-tight">
               {item.slug}
             </h4>
@@ -50,8 +49,9 @@ const History = ({ history, email, fetchHistory }) => (
                  {new Date(item.createdAt).toLocaleDateString()}
                </span>
                
+               {/* 💡 FIXED: deployUrl ki jagah slug se URL banaya */}
                <a 
-                 href={`${PROXY_BASE_URL}/${item.slug}/index.html`} 
+                 href={`http://${item.slug}.localhost:8000`} 
                  target="_blank" 
                  rel="noreferrer"
                  className="text-[9px] font-black text-white bg-red-600/5 hover:bg-red-600 px-4 py-2 rounded-xl transition-all uppercase italic"

@@ -15,52 +15,42 @@ app.use(async (req, res) => {
     let slug = '';
     let file = '';
 
-    if (hostname.includes('.localhost') || hostname.includes('.onrender.com')) {
-        const hostParts = hostname.split('.');
-        if (hostParts.length >= 3 && hostParts[0] !== 'proxy-server-beam') {
-            slug = hostParts[0];
-            file = parts.join('/') || 'index.html';
-        }
-    }
-
-    if (!slug) {
+    // 1. Subdomain resolution support (e.g. shivani.localhost)
+    if (hostname.includes('.localhost')) {
+        slug = hostname.split('.')[0];
+        file = parts.join('/') || 'index.html';
+    } else {
+        // 2. Path-based resolution support (e.g. localhost:8000/shivani/index.html)
         slug = parts[0];
         file = parts.slice(1).join('/') || 'index.html';
     }
 
     if (!slug) return res.status(404).send("Project ID missing in request");
 
-    const tryFetch = async (targetUrl) => {
-        try {
-            return await axios.get(targetUrl, { responseType: 'stream' });
-        } catch (e) {
-            return null;
-        }
-    };
+    // Clean up trailing slash or asset lookup
+    const targetUrl = `${BASE_PATH}/${slug}/${file}`;
 
-    // Candidate 1: Standard Direct
-    let targetUrl = `${BASE_PATH}/${slug}/${file}`;
-    let response = await tryFetch(targetUrl);
-
-    // Candidate 2: Nested Subfolder (e.g. outputs/final/akina/index.html or outputs/final/dist/index.html)
-    if (!response) {
-        // If file is just index.html or empty, try searching inside first inner folder
-        // Target common subfolders
-        const subfolders = ['akina', 'dist', 'build', slug];
-        for (const sub of subfolders) {
-            const nestedUrl = `${BASE_PATH}/${slug}/${sub}/${file}`;
-            response = await tryFetch(nestedUrl);
-            if (response) break;
-        }
-    }
-
-    if (response) {
+    try {
+        const response = await axios.get(targetUrl, { responseType: 'stream' });
         const contentType = mime.lookup(file) || 'text/html';
+        
         res.set('Content-Type', contentType);
         return response.data.pipe(res);
+    } catch (err) {
+        // 3. SPA Fallback Logic: If asset missing, fallback to index.html for client-side routing
+        if (!file.includes('.')) {
+            try {
+                const fallbackUrl = `${BASE_PATH}/${slug}/index.html`;
+                const fallbackResponse = await axios.get(fallbackUrl, { responseType: 'stream' });
+                res.set('Content-Type', 'text/html');
+                return fallbackResponse.data.pipe(res);
+            } catch (fallbackErr) {
+                return res.status(404).send('SPA Entry point (index.html) not found.');
+            }
+        }
+        console.error(`❌ Proxy Fetch Error [${slug}/${file}]:`, err.message);
+        return res.status(404).send('File Not Found');
     }
-
-    return res.status(404).send(`404: Could not find ${file} for deployment '${slug}'`);
 });
 
-app.listen(PORT, () => console.log(`🚀 Proxy Server LIVE on ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Single Proxy Server LIVE on ${PORT}`));
