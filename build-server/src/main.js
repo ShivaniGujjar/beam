@@ -3,12 +3,13 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 const Redis = require('ioredis');
 const mongoose = require('mongoose');
+const express = require('express'); // 👈 Express add kiya
 
 // 1. 💡 BULLETPROOF DOTENV LOADING
 const possiblePaths = [
     path.resolve(__dirname, '../../.env'), 
-    path.resolve(__dirname, '../.env'),    
-    path.resolve(process.cwd(), '.env'),    
+    path.resolve(__dirname, '../.env'),     
+    path.resolve(process.cwd(), '.env'),     
 ];
 
 let envLoaded = false;
@@ -108,4 +109,16 @@ subscriber.on('message', async (channel, message) => {
             }));
         }
     }
+});
+
+// 5. 💡 DUMMY EXPRESS PORT BINDING FOR RENDER WEB SERVICE
+const app = express();
+const PORT = process.env.PORT || 9001;
+
+app.get('/', (req, res) => {
+    res.send('Beam Build Server Worker is Live & Listening for Redis Tasks! 🚀');
+});
+
+app.listen(PORT, () => {
+    console.log(`✅ Port binding active on port ${PORT} for Render health checks.`);
 });
