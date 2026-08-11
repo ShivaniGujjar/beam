@@ -5,6 +5,7 @@ import Auth from './components/Auth';
 import Navbar from './components/Navbar';
 import DeploymentPanel from './components/DeploymentPanel';
 import History from './components/History';
+import LandingPage from './components/LandingPage';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'https://beam-api-server.onrender.com';
 const socket = io(API_BASE_URL, { autoConnect: true });
@@ -16,6 +17,7 @@ const formatSlug = (name) => {
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
+  const [showLanding, setShowLanding] = useState(!localStorage.getItem('token'));
   const [authMode, setAuthMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -47,6 +49,7 @@ function App() {
         if (res.data.token) {
           localStorage.setItem('token', res.data.token);
           setIsAuthenticated(true);
+          setShowLanding(false);
         }
       } else {
         setAuthMode('login');
@@ -59,6 +62,7 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     setIsAuthenticated(false);
+    setShowLanding(true);
     window.location.reload();
   };
 
@@ -86,7 +90,6 @@ function App() {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
-  // 💡 CRITICAL CRASH FIX: Safe String Checking
   useEffect(() => {
     const lastLog = logs[logs.length - 1];
     if (lastLog && typeof lastLog === 'string') {
@@ -97,23 +100,26 @@ function App() {
     }
   }, [logs]);
 
-  // 💡 CRITICAL CRASH FIX: Convert Non-Strings Before State Save
   useEffect(() => {
-    const handleLog = (log) => {
-      if (!log) return;
-      const safeLog = typeof log === 'string' ? log : JSON.stringify(log);
-      setLogs((prev) => [...prev, safeLog]);
+    const handleLog = (logData) => {
+      if (!logData) return;
+      let extractedLog = logData;
+      if (typeof logData === 'object') {
+        extractedLog = logData.log || logData.message || logData.data || JSON.stringify(logData);
+      }
+      if (extractedLog === 'undefined' || extractedLog === 'null') return;
+      setLogs((prevLogs) => [...prevLogs, String(extractedLog)]);
     };
 
     const handleStatus = (data) => {
       console.log("📩 Socket Signal Received:", data); 
-      const status = typeof data === 'string' ? data : data?.status;
-      
-      if (status === 'READY') {
+      const status = typeof data === 'string' ? data : (data?.status || data);
+
+      if (status === 'READY' || status === 'DEPLOYMENT COMPLETE') {
         setCurrentStep(4);
         setIsDeploying(false);
         setLogs((prev) => [...prev, "✅ DEPLOYMENT COMPLETE: Site is Live!"]);
-        
+
         const cleanSlug = formatSlug(projectName);
         setDeployLink(`http://${cleanSlug}.localhost:8000`);
         fetchHistory(); 
@@ -122,11 +128,13 @@ function App() {
 
     socket.on('message', handleLog);
     socket.on('log', handleLog);
+    socket.on('message:log', handleLog);
     socket.on('status', handleStatus);
 
     return () => {
       socket.off('message', handleLog);
       socket.off('log', handleLog);
+      socket.off('message:log', handleLog);
       socket.off('status', handleStatus);
     };
   }, [projectName]);
@@ -134,7 +142,6 @@ function App() {
   const handleDeploy = async () => {
     if (!repoUrl || !projectName) return;
     const token = localStorage.getItem('token');
-    
     const formattedSlug = formatSlug(projectName);
 
     setIsDeploying(true);
@@ -142,15 +149,17 @@ function App() {
     setCurrentStep(1);
     setDeployLink('');
 
+    socket.emit('subscribe', formattedSlug);
+    socket.emit('subscribe', `logs:${formattedSlug}`);
+
     try {
       const res = await axios.post(`${API_BASE_URL}/api/v1/projects/deploy`, 
         { gitUrl: repoUrl, slug: formattedSlug },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      
+
       if (res.data) {
         fetchHistory(); 
-        socket.emit('subscribe', formattedSlug);
       }
     } catch (err) {
       setLogs((prev) => [...prev, `❌ Error: ${err.response?.data?.error || 'Deployment failed'}`]);
@@ -158,10 +167,17 @@ function App() {
     }
   };
 
+  // 1. Show Landing Page if user isn't logged in and landing is active
+  if (!isAuthenticated && showLanding) {
+    return <LandingPage onGetStarted={() => setShowLanding(false)} />;
+  }
+
+  // 2. Show Auth Form (Login/Signup) if user clicked Get Started
   if (!isAuthenticated) {
     return <Auth authMode={authMode} setAuthMode={setAuthMode} email={email} setEmail={setEmail} password={password} setPassword={setPassword} authError={authError} handleAuth={handleAuth} />;
   }
 
+  // 3. Main Dashboard for Logged-in Users
   return (
     <div className="min-h-screen bg-[#050505] text-slate-200 font-sans">
       <Navbar isDeploying={isDeploying} handleLogout={handleLogout} />
@@ -175,7 +191,7 @@ function App() {
           isDeploying={isDeploying} 
           steps={steps} 
           currentStep={currentStep} 
-          logs={logs} 
+          logs={logs || []} 
           logEndRef={logEndRef} 
           setLogs={setLogs} 
           deployLink={deployLink} 
