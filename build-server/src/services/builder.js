@@ -8,13 +8,14 @@ const runBuild = (projectPath, sendLog, slug) => {
     return new Promise((resolve, reject) => {
         sendLog("🛠️ Build sequence initiated...");
         
-        // 💡 Direct vite build call fallback (tsc strict checks ignore karke bundle banane ke liye)
-        const command = `npm install --prefer-offline --no-audit --no-fund && npx vite build`;
+        // 💡 FIXED: Explicitly devDependencies install hone do taaki Vite plugins mil sakein
+        const command = `npm install --include=dev --prefer-offline --no-audit --no-fund && npx vite build`;
         
         const buildProcess = exec(command, { 
             cwd: projectPath, 
             shell: true,
-            env: { ...process.env, NODE_ENV: 'production' }
+            // 💡 Removed NODE_ENV=production so devDependencies aren't pruned during install
+            env: { ...process.env }
         });
 
         // Capture Standard Output
@@ -23,7 +24,7 @@ const runBuild = (projectPath, sendLog, slug) => {
             if (msg) sendLog(`[BUILD]: ${msg}`);
         });
 
-        // 💡 Capture Errors (is se real issue console pe dikhega)
+        // Capture Standard Error
         buildProcess.stderr.on('data', (data) => {
             const msg = data.toString().trim();
             if (msg) sendLog(`[BUILD STDERR]: ${msg}`);
