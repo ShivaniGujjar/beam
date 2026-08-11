@@ -9,8 +9,8 @@ import History from './components/History';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'https://beam-api-server.onrender.com';
 const socket = io(API_BASE_URL, { autoConnect: true });
 
-// Helper to ensure clean, consistent slug formatting
 const formatSlug = (name) => {
+  if (!name) return '';
   return name.toLowerCase().trim().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-');
 };
 
@@ -86,9 +86,10 @@ function App() {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
+  // 💡 CRITICAL CRASH FIX: Safe String Checking
   useEffect(() => {
     const lastLog = logs[logs.length - 1];
-    if (lastLog) {
+    if (lastLog && typeof lastLog === 'string') {
       if (lastLog.includes('Cloning') || lastLog.includes('CLONING')) setCurrentStep(1);
       if (lastLog.includes('Installing') || lastLog.includes('Build') || lastLog.includes('BUILD')) setCurrentStep(2);
       if (lastLog.includes('Upload') || lastLog.includes('Supabase') || lastLog.includes('Beaming')) setCurrentStep(3);
@@ -96,13 +97,17 @@ function App() {
     }
   }, [logs]);
 
-  // Unified Socket Subscription Listener
+  // 💡 CRITICAL CRASH FIX: Convert Non-Strings Before State Save
   useEffect(() => {
-    const handleLog = (log) => setLogs((prev) => [...prev, log]);
+    const handleLog = (log) => {
+      if (!log) return;
+      const safeLog = typeof log === 'string' ? log : JSON.stringify(log);
+      setLogs((prev) => [...prev, safeLog]);
+    };
 
     const handleStatus = (data) => {
       console.log("📩 Socket Signal Received:", data); 
-      const status = typeof data === 'string' ? data : data.status;
+      const status = typeof data === 'string' ? data : data?.status;
       
       if (status === 'READY') {
         setCurrentStep(4);
@@ -145,7 +150,6 @@ function App() {
       
       if (res.data) {
         fetchHistory(); 
-        // Subscribe using exact formatted slug
         socket.emit('subscribe', formattedSlug);
       }
     } catch (err) {
